@@ -9,7 +9,7 @@
         "emitDecoratorMetadata": true,
         "removeComments": false,
         "declaration": true,
-        "sourceMap": true,
+        "sourceMap": false,
         "newLine": "LF"
     },
     "include": [

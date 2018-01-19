@@ -372,4 +372,3 @@ class WebpackRuleBuilder {
     }
 }
 exports.WebpackRuleBuilder = WebpackRuleBuilder;
-//# sourceMappingURL=index.js.map
