@@ -4,7 +4,7 @@ This is a utility to create webpack config from simple configuration options.
 
 ## Installation
 
-`npm i --save-dev olee/webpack-configurator`
+`npm i --save-dev olee/webpack-configurator webpack @types/node @types/webpack`
 
 ## Example
 
