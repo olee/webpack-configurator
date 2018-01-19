@@ -214,8 +214,11 @@ class WebpackConfigurationBuilder {
         if (this.options.react) {
             if (this._config.resolve.extensions.indexOf('.jsx') < 0)
                 this._config.resolve.extensions.push('.jsx');
-            if (this.options.react.hotReload)
+            if (this.options.react.hotReload) {
                 this.requireNpmPackage('react-hot-loader');
+                if (this.options.typescript)
+                    this.requireNpmPackage('@types/react-hot-loader');
+            }
             if (!this.testExtension('jsx')) {
                 this.addRule('jsx')
                     .addReactHotLoader()

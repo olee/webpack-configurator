@@ -200,9 +200,9 @@ export class WebpackConfigurationBuilder {
     };
 
     private _built = false;
-    
+
     private readonly options: RequiredOptions;
-    
+
     private readonly _requiredNpmPackages: Record<string, boolean> = {};
 
     constructor(
@@ -277,7 +277,7 @@ export class WebpackConfigurationBuilder {
     private requireNpmPackage(pkg: string, devOnly = true) {
         this._requiredNpmPackages[pkg] = devOnly;
     }
-    
+
     public get requiredNpmPackages() {
         return Object.keys(this._requiredNpmPackages).sort();
     }
@@ -376,8 +376,11 @@ export class WebpackConfigurationBuilder {
         if (this.options.react) {
             if (this._config.resolve.extensions.indexOf('.jsx') < 0)
                 this._config.resolve.extensions.push('.jsx');
-            if (this.options.react.hotReload)
+            if (this.options.react.hotReload) {
                 this.requireNpmPackage('react-hot-loader');
+                if (this.options.typescript)
+                    this.requireNpmPackage('@types/react-hot-loader');
+            }
 
             if (!this.testExtension('jsx')) {
                 this.addRule('jsx')
@@ -447,7 +450,7 @@ export class WebpackConfigurationBuilder {
                     break;
             }
         }
-        
+
         if (this.options.json) {
             this.requireNpmPackage('json-loader');
             if (!this.testExtension('json')) {
@@ -485,7 +488,7 @@ export class WebpackConfigurationBuilder {
 
         return this._config;
     }
-    
+
     public get config(): webpack.Configuration {
         if (!this._built)
             return this.build();
