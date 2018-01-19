@@ -2,6 +2,10 @@
 
 This is a utility to create webpack config from simple configuration options.
 
+## Installation
+
+`npm i --save-dev olee/webpack-configurator`
+
 ## Example
 
 ```ts
