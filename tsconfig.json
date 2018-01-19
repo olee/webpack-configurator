@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "target": "es6",
+        "module": "commonjs",
+        "moduleResolution": "node",
+        "strict": true,
+        "strictNullChecks": true,
+        "experimentalDecorators": true,
+        "emitDecoratorMetadata": true,
+        "removeComments": false,
+        "declaration": true,
+        "sourceMap": true,
+        "newLine": "LF"
+    },
+    "include": [
+        "*.ts"
+    ],
+    "compileOnSave": true
+}
