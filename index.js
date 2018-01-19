@@ -212,6 +212,8 @@ class WebpackConfigurationBuilder {
             }
         }
         if (this.options.react) {
+            this.requireNpmPackage('react');
+            this.requireNpmPackage('react-dom');
             if (this._config.resolve.extensions.indexOf('.jsx') < 0)
                 this._config.resolve.extensions.push('.jsx');
             if (this.options.react.hotReload) {
@@ -228,6 +230,8 @@ class WebpackConfigurationBuilder {
                 console.warn('Rule for .jsx already registerd - skipping');
             }
             if (this.options.typescript) {
+                this.requireNpmPackage('@types/react');
+                this.requireNpmPackage('@types/react-dom');
                 if (this._config.resolve.extensions.indexOf('.tsx') < 0)
                     this._config.resolve.extensions.push('.tsx');
                 if (!this.testExtension('tsx')) {
