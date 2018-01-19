@@ -299,7 +299,7 @@ export class WebpackConfigurationBuilder {
         this._config.entry[key] = file;
     }
 
-    public build() {
+    public build(): webpack.Configuration {
         if (this._built) throw new Error('build() must only be called once!');
         this._built = true;
 
@@ -486,7 +486,7 @@ export class WebpackConfigurationBuilder {
         return this._config;
     }
     
-    public get config() {
+    public get config(): webpack.Configuration {
         if (!this._built)
             return this.build();
         return this._config;

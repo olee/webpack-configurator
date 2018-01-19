@@ -142,8 +142,8 @@ export declare class WebpackConfigurationBuilder {
     readonly requiredNpmPackages: string[];
     addPlugin(plugin: webpack.Plugin): void;
     addEntry(key: string, file: string | string[], options?: WebpackEntryOptions): void;
-    build(): WebpackConfiguration;
-    readonly config: WebpackConfiguration;
+    build(): webpack.Configuration;
+    readonly config: webpack.Configuration;
 }
 export declare class WebpackRuleBuilder {
     private options;
