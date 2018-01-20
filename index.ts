@@ -110,7 +110,7 @@ export interface BaseOptions {
      * Requires babel-loader, babel, ... npm packages.
      */
     babel?: false | {
-        presets?: string[];
+        presets?: any;
         plugins?: string[];
     };
     /** default: false */
