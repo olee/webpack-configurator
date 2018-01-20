@@ -381,6 +381,7 @@ class WebpackRuleBuilder {
             // It enables caching results in ./node_modules/.cache/babel-loader/ directory for faster rebuilds.
             cacheDirectory: true,
             presets: this.options.babel.presets,
+            plugins: this.options.babel.plugins,
         });
         return this;
     }
