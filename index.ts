@@ -197,7 +197,7 @@ export class WebpackConfigurationBuilder {
             compress: true,
             // port: PORT,
             lazy: false,
-            hot: true,
+            hot: false,
             overlay: {
                 warnings: true,
                 errors: true,
@@ -327,6 +327,7 @@ export class WebpackConfigurationBuilder {
         }
 
         if (this.options.hotReload) {
+            this._config.devServer.hot = true;
             this.addPlugin(new webpack.HotModuleReplacementPlugin());
         }
 
@@ -553,7 +554,7 @@ export class WebpackRuleBuilder {
      * Adds 'react-hot-loader/webpack' if react hot loading enabled and no babel is used
      */
     public addReactHotLoader() {
-        if (this.options.react && this.options.react.hotReload && !this.options.babel)
+        if (this.options.hotReload && this.options.react && this.options.react.hotReload && !this.options.babel)
             this.addLoader('react-hot-loader/webpack');
         return this;
     }
