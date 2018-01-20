@@ -126,6 +126,7 @@ export interface Options extends BaseOptions {
 export interface RequiredOptions extends Options {
     resources: ResourceOptions;
     output: OutputOptions;
+    defines: Record<string, string>;
 }
 export interface WebpackEntryOptions {
     /** default: true */

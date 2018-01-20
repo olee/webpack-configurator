@@ -74,6 +74,8 @@ class WebpackConfigurationBuilder {
             this.options.output = {};
         if (this.options.resources === undefined)
             this.options.resources = {};
+        if (this.options.defines === undefined)
+            this.options.defines = {};
         if (this.options.css === undefined)
             this.options.css = {};
         if (this.options.devtool === undefined)
@@ -163,6 +165,7 @@ class WebpackConfigurationBuilder {
             }));
         }
         if (this.options.defines) {
+            this.options.defines['WEBPACK_HOT'] = JSON.stringify(!!this.options.hotReload);
             this.addPlugin(new webpack.DefinePlugin(this.options.defines));
         }
         // if (this.isDebug) {
