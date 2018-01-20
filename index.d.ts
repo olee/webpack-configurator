@@ -1,5 +1,13 @@
 /// <reference types="webpack" />
 import * as webpack from 'webpack';
+declare global  {
+    interface NodeModule {
+        hot?: {
+            accept(fn: string, cb: () => void): void;
+        };
+    }
+    const WEBPACK_HOT: boolean;
+}
 export interface CopyPattern {
     /** File source path or glob */
     from: string;
@@ -80,7 +88,7 @@ export interface BaseOptions {
      * Requires babel-loader, babel, ... npm packages.
      */
     babel?: false | {
-        presets?: any;
+        presets?: (string | (string | any)[])[];
         plugins?: string[];
     };
     /** default: false */
@@ -109,6 +117,7 @@ export interface BaseOptions {
     clean?: false | {
         exclude?: string[];
     };
+    defines?: Record<string, string>;
     resources?: ResourceOptions;
 }
 export interface Options extends BaseOptions {

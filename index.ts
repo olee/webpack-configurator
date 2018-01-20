@@ -8,6 +8,15 @@ import * as CleanWebpackPlugin from 'clean-webpack-plugin';
 import * as CopyWebpackPlugin from 'copy-webpack-plugin';
 // import * as HtmlWebpackPlugin from 'html-webpack-plugin';
 
+declare global {
+    interface NodeModule {
+        hot?: {
+            accept(fn: string, cb: () => void): void;
+        };
+    }
+    const WEBPACK_HOT: boolean;
+}
+
 mockRequire('webpack-module-hot-accept', function(this: webpack.loader.LoaderContext, source: string, map: any) {
     if (!/\bmodule.hot\b/.test(source)) {
         source = source + `
@@ -110,7 +119,7 @@ export interface BaseOptions {
      * Requires babel-loader, babel, ... npm packages.
      */
     babel?: false | {
-        presets?: any;
+        presets?: (string | (string | any)[])[];
         plugins?: string[];
     };
     /** default: false */
@@ -139,6 +148,7 @@ export interface BaseOptions {
     clean?: false | {
         exclude?: string[],
     };
+    defines?: Record<string, string>;
     resources?: ResourceOptions;
 }
 
@@ -323,6 +333,10 @@ export class WebpackConfigurationBuilder {
             }));
         }
 
+        if (this.options.defines) {
+            this.addPlugin(new webpack.DefinePlugin(this.options.defines));
+        }
+
         // if (this.isDebug) {
         //     this.addPlugin(new webpack.LoaderOptionsPlugin({ debug: true }));
         // }
@@ -334,14 +348,15 @@ export class WebpackConfigurationBuilder {
         this._config.output.publicPath = this.options.output.publicPath;
 
         if (this.options.babel) {
-            this.requireNpmPackage('babel-core');
-            this.requireNpmPackage('babel-loader');
-            this.requireNpmPackage('babel-polyfill');
-            this.requireNpmPackage('babel-preset-es2015');
-            this.requireNpmPackage('babel-preset-react');
-            this.requireNpmPackage('babel-preset-stage-0');
+            this.requireNpmPackage('babel-loader@8.0.0-beta.0');
+            this.requireNpmPackage('@babel/core');
+            this.requireNpmPackage('@babel/polyfill');
+            this.requireNpmPackage('@babel/preset-env');
+            if (this.options.react)
+                this.requireNpmPackage('@babel/preset-react');
             if (!this.testExtension('js')) {
                 this.addRule('js')
+                    .exclude(/node_modules/)
                     .addBabelLoader();
             } else {
                 console.warn('Rule for .tsx already registerd - skipping');
@@ -355,7 +370,7 @@ export class WebpackConfigurationBuilder {
             this.requireNpmPackage('ts-loader');
             if (!this.testExtension('ts')) {
                 this.addRule('ts')
-                    .exclude(/(node_modules|jspm_packages)/)
+                    .exclude(/node_modules/)
                     .addLoader('ts-loader')
                     .addBabelLoader();
             } else {
@@ -398,7 +413,7 @@ export class WebpackConfigurationBuilder {
                     this._config.resolve.extensions.push('.tsx');
                 if (!this.testExtension('tsx')) {
                     this.addRule('tsx')
-                        .exclude(/(node_modules|jspm_packages)/)
+                        .exclude(/node_modules/)
                         .addLoader('ts-loader')
                         .addReactHotLoader()
                         .addBabelLoader();

@@ -6,7 +6,6 @@ const mockRequire = require("mock-require");
 const webpack = require("webpack");
 const CleanWebpackPlugin = require("clean-webpack-plugin");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
-// import * as HtmlWebpackPlugin from 'html-webpack-plugin';
 mockRequire('webpack-module-hot-accept', function (source, map) {
     if (!/\bmodule.hot\b/.test(source)) {
         source = source + `
@@ -163,6 +162,9 @@ class WebpackConfigurationBuilder {
                 ignore: this.options.resources.copyFiles.ignore,
             }));
         }
+        if (this.options.defines) {
+            this.addPlugin(new webpack.DefinePlugin(this.options.defines));
+        }
         // if (this.isDebug) {
         //     this.addPlugin(new webpack.LoaderOptionsPlugin({ debug: true }));
         // }
@@ -172,14 +174,15 @@ class WebpackConfigurationBuilder {
         this._config.output.filename = this.options.output.filename || '[name].[hash].js';
         this._config.output.publicPath = this.options.output.publicPath;
         if (this.options.babel) {
-            this.requireNpmPackage('babel-core');
-            this.requireNpmPackage('babel-loader');
-            this.requireNpmPackage('babel-polyfill');
-            this.requireNpmPackage('babel-preset-es2015');
-            this.requireNpmPackage('babel-preset-react');
-            this.requireNpmPackage('babel-preset-stage-0');
+            this.requireNpmPackage('babel-loader@8.0.0-beta.0');
+            this.requireNpmPackage('@babel/core');
+            this.requireNpmPackage('@babel/polyfill');
+            this.requireNpmPackage('@babel/preset-env');
+            if (this.options.react)
+                this.requireNpmPackage('@babel/preset-react');
             if (!this.testExtension('js')) {
                 this.addRule('js')
+                    .exclude(/node_modules/)
                     .addBabelLoader();
             }
             else {
@@ -193,7 +196,7 @@ class WebpackConfigurationBuilder {
             this.requireNpmPackage('ts-loader');
             if (!this.testExtension('ts')) {
                 this.addRule('ts')
-                    .exclude(/(node_modules|jspm_packages)/)
+                    .exclude(/node_modules/)
                     .addLoader('ts-loader')
                     .addBabelLoader();
             }
@@ -236,7 +239,7 @@ class WebpackConfigurationBuilder {
                     this._config.resolve.extensions.push('.tsx');
                 if (!this.testExtension('tsx')) {
                     this.addRule('tsx')
-                        .exclude(/(node_modules|jspm_packages)/)
+                        .exclude(/node_modules/)
                         .addLoader('ts-loader')
                         .addReactHotLoader()
                         .addBabelLoader();

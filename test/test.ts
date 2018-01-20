@@ -11,7 +11,17 @@ const configBuilder = new WebpackConfigurationBuilder(path.resolve(__dirname, 'b
         tsConfigFile: './src/tsconfig.json',
         tslint: true,
     },
-    babel: false,
+    babel: {
+        presets: [
+            ['@babel/env', {
+                targets: {
+                    browsers: ['last 2 versions']
+                },
+                useBuiltIns: 'usage',
+            }],
+            '@babel/react'
+        ]
+    },
     react: {
         hotReload: true,
     },
