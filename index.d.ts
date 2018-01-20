@@ -81,7 +81,10 @@ export interface BaseOptions {
      */
     typescript?: false | {
         tsConfigFile: string;
-        tslint?: boolean;
+        tslint?: false | {
+            typeCheck?: boolean;
+            emitErrors?: boolean;
+        };
     };
     /**
      * default: false

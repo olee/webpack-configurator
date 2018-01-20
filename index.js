@@ -213,8 +213,8 @@ class WebpackConfigurationBuilder {
                 this.addRule('ts', 'pre')
                     .addLoader('tslint-loader', {
                     tsConfigFile: this.options.typescript.tsConfigFile,
-                    typeCheck: false,
-                    emitErrors: false,
+                    typeCheck: this.options.typescript.tslint.typeCheck,
+                    emitErrors: this.options.typescript.tslint.emitErrors,
                 });
             }
         }
@@ -366,12 +366,8 @@ class WebpackRuleBuilder {
      * Adds 'react-hot-loader/webpack' if react hot loading enabled and no babel is used
      */
     addReactHotLoader() {
-        if (this.options.hotReload && this.options.react && this.options.react.hotReload) {
-            if (this.options.babel)
-                this.addLoader('react-hot-loader/babel');
-            else
-                this.addLoader('react-hot-loader/webpack');
-        }
+        if (this.options.hotReload && this.options.react && this.options.react.hotReload && !this.options.babel)
+            this.addLoader('react-hot-loader/webpack');
         return this;
     }
     /**

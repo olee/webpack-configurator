@@ -112,7 +112,10 @@ export interface BaseOptions {
      */
     typescript?: false | {
         tsConfigFile: string;
-        tslint?: boolean;
+        tslint?: false | {
+            typeCheck?: boolean;
+            emitErrors?: boolean;
+        };
     };
     /** 
      * default: false
@@ -387,8 +390,8 @@ export class WebpackConfigurationBuilder {
                 this.addRule('ts', 'pre')
                     .addLoader('tslint-loader', {
                         tsConfigFile: this.options.typescript.tsConfigFile,
-                        typeCheck: false,
-                        emitErrors: false,
+                        typeCheck: this.options.typescript.tslint.typeCheck,
+                        emitErrors: this.options.typescript.tslint.emitErrors,
                     });
             }
         }
