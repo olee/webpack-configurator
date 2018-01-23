@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
 const _ = require("lodash");
 const mockRequire = require("mock-require");
 const webpack = require("webpack");
@@ -100,6 +102,11 @@ class WebpackConfigurationBuilder {
             if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
                 this.options.babel.plugins.push('react-hot-loader/babel');
         }
+        let pkgJson = fs.readFileSync('./package.json', 'UTF-8');
+        if (pkgJson) {
+            this.packageJson = JSON.parse(pkgJson);
+            this.packageJsonHash = crypto.createHash('md5').update(pkgJson).digest('hex');
+        }
     }
     requireExtension(importName, packageName) {
         if (!packageName)
@@ -116,7 +123,7 @@ class WebpackConfigurationBuilder {
     }
     addRule(test, enforce, checkIfExists = true) {
         let extensions = typeof test === 'string' ? [test] : test;
-        let builder = new WebpackRuleBuilder(this.options, this.extensionsRegExp(extensions), enforce);
+        let builder = new WebpackRuleBuilder(this.options, this, this.extensionsRegExp(extensions), enforce);
         if (!checkIfExists || !extensions.find(x => this.testExtension(x))) {
             this._config.module.rules.push(builder.rule);
         }
@@ -348,8 +355,9 @@ class WebpackConfigurationBuilder {
 }
 exports.WebpackConfigurationBuilder = WebpackConfigurationBuilder;
 class WebpackRuleBuilder {
-    constructor(options, test, enforce) {
+    constructor(options, builder, test, enforce) {
         this.options = options;
+        this.builder = builder;
         this.rule = {
             test: test,
             enforce: enforce,
@@ -373,9 +381,14 @@ class WebpackRuleBuilder {
      * If enabled, adds a cache-loader to speed up builds
      */
     addCacheLoader(extension) {
-        if (!this.options.cacheLoader || extension && this.options.cacheLoader[extension] === false)
+        if (WebpackRuleBuilder.cacheLoaderFailed || !this.options.cacheLoader || extension && this.options.cacheLoader[extension] === false)
             return this;
-        this.addLoader('cache-loader');
+        if (!this.builder.packageJsonHash) {
+            console.error('Could not add cache-loader. package.json hash string missing. Probably could not find package.json file');
+            WebpackRuleBuilder.cacheLoaderFailed = true;
+            return;
+        }
+        this.addLoader('cache-loader', { cacheIdentifier: `cache-loader:${this.builder.packageJsonHash} ${this.builder.env}` });
         return this;
     }
     /**
@@ -413,4 +426,5 @@ class WebpackRuleBuilder {
         return this;
     }
 }
+WebpackRuleBuilder.cacheLoaderFailed = false;
 exports.WebpackRuleBuilder = WebpackRuleBuilder;

@@ -1,4 +1,6 @@
 import * as path from 'path';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
 
 import * as _ from 'lodash';
 import * as mockRequire from 'mock-require';
@@ -232,6 +234,10 @@ export class WebpackConfigurationBuilder {
 
     private _built = false;
 
+    private packageJson: any;
+
+    public readonly packageJsonHash: string;
+
     private readonly options: RequiredOptions;
 
     private readonly _requiredNpmPackages: Record<string, boolean> = {};
@@ -277,6 +283,12 @@ export class WebpackConfigurationBuilder {
             if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
                 this.options.babel.plugins.push('react-hot-loader/babel');
         }
+        
+        let pkgJson = fs.readFileSync('./package.json', 'UTF-8');
+        if (pkgJson) {
+            this.packageJson = JSON.parse(pkgJson);
+            this.packageJsonHash = crypto.createHash('md5').update(pkgJson).digest('hex');
+        }
     }
 
     private requireExtension<T>(importName: string, packageName?: string): T {
@@ -294,7 +306,7 @@ export class WebpackConfigurationBuilder {
 
     public addRule(test: string | string[], enforce?: WebpackEnforceRule, checkIfExists = true) {
         let extensions = typeof test === 'string' ? [test] : test;
-        let builder = new WebpackRuleBuilder(this.options, this.extensionsRegExp(extensions), enforce);
+        let builder = new WebpackRuleBuilder(this.options, this, this.extensionsRegExp(extensions), enforce);
         if (!checkIfExists || !extensions.find(x => this.testExtension(x))) {
             this._config.module.rules.push(builder.rule);
         } else if (checkIfExists) {
@@ -561,12 +573,14 @@ export class WebpackConfigurationBuilder {
 }
 
 export class WebpackRuleBuilder {
+    
+    private static cacheLoaderFailed = false;
 
     public rule: webpack.BaseDirectRule & {
         use: webpack.Loader[];
     };
 
-    constructor(private options: Options, test: RegExp, enforce?: WebpackEnforceRule) {
+    constructor(private options: Options, private builder: WebpackConfigurationBuilder, test: RegExp, enforce?: WebpackEnforceRule) {
         this.rule = {
             test: test,
             enforce: enforce,
@@ -593,9 +607,14 @@ export class WebpackRuleBuilder {
      * If enabled, adds a cache-loader to speed up builds
      */
     public addCacheLoader(extension?: string) {
-        if (!this.options.cacheLoader || extension && this.options.cacheLoader[extension] === false)
+        if (WebpackRuleBuilder.cacheLoaderFailed || !this.options.cacheLoader || extension && this.options.cacheLoader[extension] === false)
             return this;
-        this.addLoader('cache-loader');
+        if (!this.builder.packageJsonHash) {
+            console.error('Could not add cache-loader. package.json hash string missing. Probably could not find package.json file');
+            WebpackRuleBuilder.cacheLoaderFailed = true;
+            return;
+        }
+        this.addLoader('cache-loader', { cacheIdentifier: `cache-loader:${this.builder.packageJsonHash} ${this.builder.env}` });
         return this;
     }
     

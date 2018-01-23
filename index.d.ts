@@ -156,6 +156,8 @@ export declare class WebpackConfigurationBuilder {
     readonly env: string;
     private _config;
     private _built;
+    private packageJson;
+    readonly packageJsonHash: string;
     private readonly options;
     private readonly _requiredNpmPackages;
     constructor(outDir: string, env: string, options: Options);
@@ -174,16 +176,18 @@ export declare class WebpackConfigurationBuilder {
 }
 export declare class WebpackRuleBuilder {
     private options;
+    private builder;
+    private static cacheLoaderFailed;
     rule: webpack.BaseDirectRule & {
         use: webpack.Loader[];
     };
-    constructor(options: Options, test: RegExp, enforce?: WebpackEnforceRule);
+    constructor(options: Options, builder: WebpackConfigurationBuilder, test: RegExp, enforce?: WebpackEnforceRule);
     exclude(exclude: webpack.Condition): this;
     addLoader(loader: string, options?: any): this;
     /**
      * If enabled, adds a cache-loader to speed up builds
      */
-    addCacheLoader(extension?: string): this;
+    addCacheLoader(extension?: string): this | undefined;
     /**
      * Adds 'ts-loader' with correct settings
      */
