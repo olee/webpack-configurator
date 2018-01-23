@@ -9,7 +9,10 @@ const configBuilder = new WebpackConfigurationBuilder(path.resolve(__dirname, 'b
     },
     typescript: {
         tsConfigFile: './src/tsconfig.json',
-        tslint: true,
+        tslint: {
+            emitErrors: false,
+            typeCheck: true,
+        },
     },
     babel: {
         presets: [

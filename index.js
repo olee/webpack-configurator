@@ -4,8 +4,6 @@ const path = require("path");
 const _ = require("lodash");
 const mockRequire = require("mock-require");
 const webpack = require("webpack");
-const CleanWebpackPlugin = require("clean-webpack-plugin");
-const CopyWebpackPlugin = require("copy-webpack-plugin");
 mockRequire('webpack-module-hot-accept', function (source, map) {
     if (!/\bmodule.hot\b/.test(source)) {
         source = source + `
@@ -40,6 +38,10 @@ class WebpackConfigurationBuilder {
             },
             resolve: {
                 extensions: ['.js'],
+                // Add 'src' to our modulesDirectories, as all our app code will live in there, so Webpack should look in there for modules
+                // modules: ['node_modules', 'src'],
+                alias: {},
+                plugins: [],
             },
             devtool: false,
             devServer: {
@@ -88,6 +90,10 @@ class WebpackConfigurationBuilder {
             if (this.options.react.hotReload === undefined)
                 this.options.react.hotReload = true;
         }
+        if (this.options.typescript) {
+            if (this.options.typescript.useTsconfigPaths !== undefined)
+                this.options.typescript.useTsconfigPaths = true;
+        }
         if (this.options.babel) {
             if (!this.options.babel.plugins)
                 this.options.babel.plugins = [];
@@ -95,15 +101,28 @@ class WebpackConfigurationBuilder {
                 this.options.babel.plugins.push('react-hot-loader/babel');
         }
     }
-    addRule(test, enforce) {
-        if (!(test instanceof RegExp)) {
-            if (typeof test === 'string')
-                test = this.extensionRegExp(test);
-            else
-                test = this.extensionsRegExp(test);
+    requireExtension(importName, packageName) {
+        if (!packageName)
+            packageName = importName;
+        this.requireNpmPackage(packageName);
+        try {
+            return require(importName);
         }
-        let builder = new WebpackRuleBuilder(this.options, test, enforce);
-        this._config.module.rules.push(builder.rule);
+        catch (error) {
+            if (error instanceof Error && error.message.indexOf(`Cannot find module '${packageName}`) >= 0)
+                throw new Error(`You have to install npm package '${packageName}' before running webpack: npm install --save-dev ${packageName}`);
+            throw error;
+        }
+    }
+    addRule(test, enforce, checkIfExists = true) {
+        let extensions = typeof test === 'string' ? [test] : test;
+        let builder = new WebpackRuleBuilder(this.options, this.extensionsRegExp(extensions), enforce);
+        if (!checkIfExists || !extensions.find(x => this.testExtension(x))) {
+            this._config.module.rules.push(builder.rule);
+        }
+        else if (checkIfExists) {
+            console.warn(`Rule for .${extensions.map(x => '.' + x).join(', ')} already registerd - skipping`);
+        }
         return builder;
     }
     testRule(name, enforce) {
@@ -149,6 +168,7 @@ class WebpackConfigurationBuilder {
             throw new Error('build() must only be called once!');
         this._built = true;
         if (this.options.clean) {
+            const CleanWebpackPlugin = this.requireExtension('clean-webpack-plugin');
             this.addPlugin(new CleanWebpackPlugin(path.resolve(this.outDir, '**'), {
                 exclude: this.options.clean.exclude,
             }));
@@ -161,6 +181,7 @@ class WebpackConfigurationBuilder {
             this.addPlugin(new webpack.HotModuleReplacementPlugin());
         }
         if (this.options.resources.copyFiles) {
+            const CopyWebpackPlugin = this.requireExtension('copy-webpack-plugin');
             this.addPlugin(new CopyWebpackPlugin(this.options.resources.copyFiles.patterns, {
                 ignore: this.options.resources.copyFiles.ignore,
             }));
@@ -184,29 +205,20 @@ class WebpackConfigurationBuilder {
             this.requireNpmPackage('@babel/preset-env');
             if (this.options.react)
                 this.requireNpmPackage('@babel/preset-react');
-            if (!this.testExtension('js')) {
-                this.addRule('js')
-                    .exclude(/node_modules/)
-                    .addBabelLoader();
-            }
-            else {
-                console.warn('Rule for .tsx already registerd - skipping');
-            }
+            this.addRule('js')
+                .exclude(/node_modules/)
+                .addBabelLoader();
         }
         if (this.options.typescript) {
-            if (this._config.resolve.extensions.indexOf('.ts') < 0)
-                this._config.resolve.extensions.push('.ts');
             this.requireNpmPackage('typescript');
             this.requireNpmPackage('ts-loader');
-            if (!this.testExtension('ts')) {
-                this.addRule('ts')
-                    .exclude(/node_modules/)
-                    .addLoader('ts-loader')
-                    .addBabelLoader();
-            }
-            else {
-                console.warn('Rule for .ts already registerd - skipping');
-            }
+            if (this._config.resolve.extensions.indexOf('.ts') < 0)
+                this._config.resolve.extensions.push('.ts');
+            this.addRule('ts')
+                .exclude(/node_modules/)
+                .addTsLoader()
+                .addBabelLoader()
+                .addCacheLoader('ts');
             if (this.options.typescript.tslint) {
                 this.requireNpmPackage('tslint');
                 this.requireNpmPackage('tslint-loader');
@@ -217,40 +229,45 @@ class WebpackConfigurationBuilder {
                     emitErrors: this.options.typescript.tslint.emitErrors,
                 });
             }
+            if (this.options.typescript.useTsconfigPaths) {
+                const TsconfigPathsPlugin = this.requireExtension('tsconfig-paths-webpack-plugin');
+                this._config.resolve.plugins.push(new TsconfigPathsPlugin({
+                    configFile: this.options.typescript.tsConfigFile,
+                }));
+            }
+            if (this.options.typescript.useForkTsChecker) {
+                const ForkTsCheckerWebpackPlugin = this.requireExtension('fork-ts-checker-webpack-plugin');
+                console.log(this.options.typescript.tsConfigFile);
+                this._config.plugins.push(new ForkTsCheckerWebpackPlugin({
+                    tsconfig: this.options.typescript.tsConfigFile,
+                }));
+            }
         }
         if (this.options.react) {
             this.requireNpmPackage('react');
             this.requireNpmPackage('react-dom');
-            if (this._config.resolve.extensions.indexOf('.jsx') < 0)
-                this._config.resolve.extensions.push('.jsx');
             if (this.options.react.hotReload) {
                 this.requireNpmPackage('react-hot-loader');
                 if (this.options.typescript)
                     this.requireNpmPackage('@types/react-hot-loader');
             }
-            if (!this.testExtension('jsx')) {
-                this.addRule('jsx')
-                    .addReactHotLoader()
-                    .addBabelLoader();
-            }
-            else {
-                console.warn('Rule for .jsx already registerd - skipping');
-            }
+            if (this._config.resolve.extensions.indexOf('.jsx') < 0)
+                this._config.resolve.extensions.push('.jsx');
+            this.addRule('jsx')
+                .addReactHotLoader()
+                .addBabelLoader()
+                .addCacheLoader('jsx');
             if (this.options.typescript) {
                 this.requireNpmPackage('@types/react');
                 this.requireNpmPackage('@types/react-dom');
                 if (this._config.resolve.extensions.indexOf('.tsx') < 0)
                     this._config.resolve.extensions.push('.tsx');
-                if (!this.testExtension('tsx')) {
-                    this.addRule('tsx')
-                        .exclude(/node_modules/)
-                        .addLoader('ts-loader')
-                        .addReactHotLoader()
-                        .addBabelLoader();
-                }
-                else {
-                    console.warn('Rule for .tsx already registerd - skipping');
-                }
+                this.addRule('tsx')
+                    .exclude(/node_modules/)
+                    .addTsLoader()
+                    .addReactHotLoader()
+                    .addBabelLoader()
+                    .addCacheLoader('tsx');
                 if (this.options.typescript.tslint) {
                     this.addRule('tsx', 'pre')
                         .addLoader('tslint-loader', {
@@ -264,26 +281,21 @@ class WebpackConfigurationBuilder {
         if (this.options.css) {
             this.requireNpmPackage('css-loader');
             this.requireNpmPackage('style-loader');
-            if (!this.testExtension('css')) {
-                this.addRule('css')
-                    .addLoader('css-loader')
-                    .addLoader('style-loader', { sourceMap: this.options.css.sourceMaps });
-            }
+            this.addRule('css')
+                .addLoader('css-loader')
+                .addLoader('style-loader', { sourceMap: this.options.css.sourceMaps });
             if (this.options.css.scss) {
                 this.requireNpmPackage('sass-loader');
                 // this.requireNpmPackage('node-sass'); // Already required as peer-dependency of sass-loader
-                if (!this.testExtension('scss')) {
-                    this.addRule('scss')
-                        .addLoader('sass-loader')
-                        .addLoader('css-loader', { sourceMap: this.options.css.sourceMaps })
-                        .addLoader('style-loader', { sourceMap: this.options.css.sourceMaps });
-                }
+                this.addRule('scss')
+                    .addLoader('sass-loader')
+                    .addLoader('css-loader', { sourceMap: this.options.css.sourceMaps })
+                    .addLoader('style-loader', { sourceMap: this.options.css.sourceMaps })
+                    .addCacheLoader('scss');
             }
         }
         if (this.options.html) {
             this.requireNpmPackage('html-loader');
-            if (this.testExtension('html'))
-                throw new Error('html options specified but already registered rules for html files');
             switch (this.options.html) {
                 case 'angular':
                     this.requireNpmPackage('ngtemplate-loader');
@@ -300,20 +312,15 @@ class WebpackConfigurationBuilder {
         }
         if (this.options.json) {
             this.requireNpmPackage('json-loader');
-            if (!this.testExtension('json')) {
-                this.addRule('json')
-                    .addLoader('json-loader');
-            }
-            else {
-                console.warn('Rule for .json already registerd - skipping');
-            }
+            this.addRule('json')
+                .addLoader('json-loader');
         }
         if (this.options.resources.urlLoad) {
             this.requireNpmPackage('url-loader');
             let unmatchedExtensions = this.options.resources.urlLoad.extensions
                 .filter(x => !this.testExtension(x));
             if (unmatchedExtensions.length > 0) {
-                this.addRule(unmatchedExtensions)
+                this.addRule(unmatchedExtensions, undefined, false)
                     .addLoader('url-loader', {
                     limit: this.options.resources.urlLoad.limit,
                     name: '[path][name].[hash].[ext]',
@@ -325,7 +332,7 @@ class WebpackConfigurationBuilder {
             let unmatchedExtensions = this.options.resources.extensions
                 .filter(x => !this.testExtension(x));
             if (unmatchedExtensions.length > 0) {
-                this.addRule(unmatchedExtensions)
+                this.addRule(unmatchedExtensions, undefined, false)
                     .addLoader('file-loader', {
                     name: '[path][name].[hash].[ext]',
                 });
@@ -359,6 +366,26 @@ class WebpackRuleBuilder {
         this.rule.use.unshift({
             loader: loader,
             options: options,
+        });
+        return this;
+    }
+    /**
+     * If enabled, adds a cache-loader to speed up builds
+     */
+    addCacheLoader(extension) {
+        if (!this.options.cacheLoader || extension && this.options.cacheLoader[extension] === false)
+            return this;
+        this.addLoader('cache-loader');
+        return this;
+    }
+    /**
+     * Adds 'ts-loader' with correct settings
+     */
+    addTsLoader() {
+        if (!this.options.typescript)
+            throw new Error('Tried to add TS loader without typescript settings configured');
+        this.addLoader('ts-loader', {
+            transpileOnly: this.options.typescript.useForkTsChecker,
         });
         return this;
     }

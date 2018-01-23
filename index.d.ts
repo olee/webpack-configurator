@@ -41,6 +41,8 @@ export interface CopyPattern {
 }
 export interface WebpackResolve extends webpack.Resolve {
     extensions: string[];
+    alias: {};
+    plugins: webpack.ResolvePlugin[];
 }
 export interface WebpackConfiguration extends webpack.Configuration {
     entry: webpack.Entry;
@@ -80,6 +82,10 @@ export interface BaseOptions {
      * Requires typescript npm package.
      */
     typescript?: false | {
+        /** default: true */
+        useTsconfigPaths?: boolean;
+        /** default: false */
+        useForkTsChecker?: boolean;
         tsConfigFile: string;
         tslint?: false | {
             typeCheck?: boolean;
@@ -105,6 +111,13 @@ export interface BaseOptions {
     };
     /** default: true */
     hotReload?: boolean;
+    cacheLoader?: false | {
+        ts?: boolean;
+        jsx?: boolean;
+        tsx?: boolean;
+        scss?: boolean;
+        [extension: string]: boolean | undefined;
+    };
     /** default: {} */
     css?: false | {
         /** default: false */
@@ -146,7 +159,8 @@ export declare class WebpackConfigurationBuilder {
     private readonly options;
     private readonly _requiredNpmPackages;
     constructor(outDir: string, env: string, options: Options);
-    addRule(test: string | string[] | RegExp, enforce?: WebpackEnforceRule): WebpackRuleBuilder;
+    private requireExtension<T>(importName, packageName?);
+    addRule(test: string | string[], enforce?: WebpackEnforceRule, checkIfExists?: boolean): WebpackRuleBuilder;
     private testRule(name, enforce?);
     private testExtension(ext, enforce?);
     private extensionsRegExp(ext);
@@ -166,6 +180,14 @@ export declare class WebpackRuleBuilder {
     constructor(options: Options, test: RegExp, enforce?: WebpackEnforceRule);
     exclude(exclude: webpack.Condition): this;
     addLoader(loader: string, options?: any): this;
+    /**
+     * If enabled, adds a cache-loader to speed up builds
+     */
+    addCacheLoader(extension?: string): this;
+    /**
+     * Adds 'ts-loader' with correct settings
+     */
+    addTsLoader(): this;
     /**
      * Adds 'react-hot-loader/webpack' if react hot loading enabled and no babel is used
      */
