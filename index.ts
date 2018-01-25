@@ -143,9 +143,20 @@ export interface BaseOptions {
           * Requires 'react-hot-loader/babel' plugin in babel presets.
           */
         hotReload?: boolean;
+        hotReloadNext?: boolean;
     };
     /** default: true */
     hotReload?: boolean;
+    nodeEnv?: string;
+    uglify?: false | {
+        /**
+         * Also transform sourceMaps?
+         * WARNING: Slow for larger projects!!
+         * Also does not work for 'cheap-source-map' options
+         * default: false
+         */
+        sourceMaps?: boolean;
+    };
     cacheLoader?: false | {
         ts?: boolean;
         jsx?: boolean;
@@ -195,6 +206,14 @@ function mergeWithArrayConcat(objValue: any, srcValue: any) {
     if (objValue instanceof Array) {
         return objValue.concat(srcValue);
     }
+}
+
+function makeObject<T>(val: boolean | T) {
+    if (!val)
+        return false;
+    if (typeof val !== 'object')
+        return {};
+    return val;
 }
 
 export class WebpackConfigurationBuilder {
@@ -255,14 +274,10 @@ export class WebpackConfigurationBuilder {
                 console.warn(`Environment ${this.env} set but not configured`);
             }
         }
-        if (this.options.output === undefined)
-            this.options.output = {};
-        if (this.options.resources === undefined)
-            this.options.resources = {};
-        if (this.options.defines === undefined)
-            this.options.defines = {};
-        if (this.options.css === undefined)
-            this.options.css = {};
+        this.options.css = makeObject(this.options.css);
+        this.options.output = makeObject(this.options.output);
+        this.options.defines = makeObject(this.options.defines);
+        this.options.resources = makeObject(this.options.resources);
         if (this.options.devtool === undefined)
             this.options.devtool = 'cheap-module-source-map';
         if (this.options.html === undefined)
@@ -277,18 +292,18 @@ export class WebpackConfigurationBuilder {
             if (this.options.typescript.useTsconfigPaths !== undefined)
                 this.options.typescript.useTsconfigPaths = true;
         }
-        if (this.options.babel) {
-            if (!this.options.babel.plugins)
-                this.options.babel.plugins = [];
-            if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
-                this.options.babel.plugins.push('react-hot-loader/babel');
-        }
-        
+
         let pkgJson = fs.readFileSync('./package.json', 'UTF-8');
         if (pkgJson) {
             this.packageJson = JSON.parse(pkgJson);
             this.packageJsonHash = crypto.createHash('md5').update(pkgJson).digest('hex');
         }
+    }
+
+    public addDefine(name: string, value: any) {
+        if (!this.options.defines)
+            this.options.defines = {};
+        this.options.defines[name] = JSON.stringify(value);
     }
 
     private requireExtension<T>(importName: string, packageName?: string): T {
@@ -352,7 +367,7 @@ export class WebpackConfigurationBuilder {
             throw new Error(`Duplicate webpack entry with key ${key}`);
         if (!(file instanceof Array))
             file = [file];
-        if (options.react !== false && this.options.hotReload && this.options.react && this.options.react.hotReload) {
+        if (options.react !== false && this.options.hotReload && this.options.react && this.options.react.hotReload && !this.options.react.hotReloadNext) {
             file.unshift('react-hot-loader/patch');
         }
         if (options.babelPolyfill && this.options.babel)
@@ -387,10 +402,18 @@ export class WebpackConfigurationBuilder {
             }));
         }
 
-        if (this.options.defines) {
-            this.options.defines['WEBPACK_HOT'] = JSON.stringify(!!this.options.hotReload);
-            this.addPlugin(new webpack.DefinePlugin(this.options.defines));
+        if (this.options.uglify) {
+            this.addPlugin(new webpack.optimize.UglifyJsPlugin({
+                sourceMap: this.options.uglify.sourceMaps,
+                parallel: true,
+                cache: true, // undocumented in typings??
+            } as webpack.optimize.UglifyJsPlugin.Options));
         }
+
+        if (this.options.nodeEnv !== undefined)
+            this.addDefine('process.env.NODE_ENV', this.options.nodeEnv);
+        this.addDefine('WEBPACK_HOT', !!this.options.hotReload);
+        this.addPlugin(new webpack.DefinePlugin(this.options.defines));
 
         // if (this.isDebug) {
         //     this.addPlugin(new webpack.LoaderOptionsPlugin({ debug: true }));
@@ -403,6 +426,11 @@ export class WebpackConfigurationBuilder {
         this._config.output.publicPath = this.options.output.publicPath;
 
         if (this.options.babel) {
+            if (!this.options.babel.plugins)
+                this.options.babel.plugins = [];
+            if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
+                this.options.babel.plugins.push('react-hot-loader/babel');
+
             this.requireNpmPackage('babel-loader@8.0.0-beta.0');
             this.requireNpmPackage('@babel/core');
             this.requireNpmPackage('@babel/polyfill');
@@ -417,7 +445,7 @@ export class WebpackConfigurationBuilder {
         if (this.options.typescript) {
             this.requireNpmPackage('typescript');
             this.requireNpmPackage('ts-loader');
-            
+
             if (this._config.resolve.extensions.indexOf('.ts') < 0)
                 this._config.resolve.extensions.push('.ts');
             this.addRule('ts')
@@ -425,7 +453,7 @@ export class WebpackConfigurationBuilder {
                 .addTsLoader()
                 .addBabelLoader()
                 .addCacheLoader('ts');
-                
+
             if (this.options.typescript.tslint) {
                 this.requireNpmPackage('tslint');
                 this.requireNpmPackage('tslint-loader');
@@ -461,18 +489,18 @@ export class WebpackConfigurationBuilder {
                 if (this.options.typescript)
                     this.requireNpmPackage('@types/react-hot-loader');
             }
-            
+
             if (this._config.resolve.extensions.indexOf('.jsx') < 0)
                 this._config.resolve.extensions.push('.jsx');
             this.addRule('jsx')
                 .addReactHotLoader()
                 .addBabelLoader()
                 .addCacheLoader('jsx');
-                    
+
             if (this.options.typescript) {
                 this.requireNpmPackage('@types/react');
                 this.requireNpmPackage('@types/react-dom');
-                
+
                 if (this._config.resolve.extensions.indexOf('.tsx') < 0)
                     this._config.resolve.extensions.push('.tsx');
                 this.addRule('tsx')
@@ -481,7 +509,7 @@ export class WebpackConfigurationBuilder {
                     .addReactHotLoader()
                     .addBabelLoader()
                     .addCacheLoader('tsx');
-                    
+
                 if (this.options.typescript.tslint) {
                     this.addRule('tsx', 'pre')
                         .addLoader('tslint-loader', {
@@ -496,15 +524,15 @@ export class WebpackConfigurationBuilder {
         if (this.options.css) {
             this.requireNpmPackage('css-loader');
             this.requireNpmPackage('style-loader');
-            
+
             this.addRule('css')
                 .addLoader('css-loader')
                 .addLoader('style-loader', { sourceMap: this.options.css.sourceMaps });
-                
+
             if (this.options.css.scss) {
                 this.requireNpmPackage('sass-loader');
                 // this.requireNpmPackage('node-sass'); // Already required as peer-dependency of sass-loader
-                
+
                 this.addRule('scss')
                     .addLoader('sass-loader')
                     .addLoader('css-loader', { sourceMap: this.options.css.sourceMaps })
@@ -573,7 +601,7 @@ export class WebpackConfigurationBuilder {
 }
 
 export class WebpackRuleBuilder {
-    
+
     private static cacheLoaderFailed = false;
 
     public rule: webpack.BaseDirectRule & {
@@ -602,7 +630,7 @@ export class WebpackRuleBuilder {
         });
         return this;
     }
-    
+
     /**
      * If enabled, adds a cache-loader to speed up builds
      */
@@ -617,7 +645,7 @@ export class WebpackRuleBuilder {
         this.addLoader('cache-loader', { cacheIdentifier: `cache-loader:${this.builder.packageJsonHash} ${this.builder.env}` });
         return this;
     }
-    
+
     /**
      * Adds 'ts-loader' with correct settings
      */

@@ -28,6 +28,13 @@ function mergeWithArrayConcat(objValue, srcValue) {
         return objValue.concat(srcValue);
     }
 }
+function makeObject(val) {
+    if (!val)
+        return false;
+    if (typeof val !== 'object')
+        return {};
+    return val;
+}
 class WebpackConfigurationBuilder {
     constructor(outDir, env = 'dev', options) {
         this.outDir = outDir;
@@ -74,14 +81,10 @@ class WebpackConfigurationBuilder {
                 console.warn(`Environment ${this.env} set but not configured`);
             }
         }
-        if (this.options.output === undefined)
-            this.options.output = {};
-        if (this.options.resources === undefined)
-            this.options.resources = {};
-        if (this.options.defines === undefined)
-            this.options.defines = {};
-        if (this.options.css === undefined)
-            this.options.css = {};
+        this.options.css = makeObject(this.options.css);
+        this.options.output = makeObject(this.options.output);
+        this.options.defines = makeObject(this.options.defines);
+        this.options.resources = makeObject(this.options.resources);
         if (this.options.devtool === undefined)
             this.options.devtool = 'cheap-module-source-map';
         if (this.options.html === undefined)
@@ -96,17 +99,16 @@ class WebpackConfigurationBuilder {
             if (this.options.typescript.useTsconfigPaths !== undefined)
                 this.options.typescript.useTsconfigPaths = true;
         }
-        if (this.options.babel) {
-            if (!this.options.babel.plugins)
-                this.options.babel.plugins = [];
-            if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
-                this.options.babel.plugins.push('react-hot-loader/babel');
-        }
         let pkgJson = fs.readFileSync('./package.json', 'UTF-8');
         if (pkgJson) {
             this.packageJson = JSON.parse(pkgJson);
             this.packageJsonHash = crypto.createHash('md5').update(pkgJson).digest('hex');
         }
+    }
+    addDefine(name, value) {
+        if (!this.options.defines)
+            this.options.defines = {};
+        this.options.defines[name] = JSON.stringify(value);
     }
     requireExtension(importName, packageName) {
         if (!packageName)
@@ -163,7 +165,7 @@ class WebpackConfigurationBuilder {
             throw new Error(`Duplicate webpack entry with key ${key}`);
         if (!(file instanceof Array))
             file = [file];
-        if (options.react !== false && this.options.hotReload && this.options.react && this.options.react.hotReload) {
+        if (options.react !== false && this.options.hotReload && this.options.react && this.options.react.hotReload && !this.options.react.hotReloadNext) {
             file.unshift('react-hot-loader/patch');
         }
         if (options.babelPolyfill && this.options.babel)
@@ -193,10 +195,17 @@ class WebpackConfigurationBuilder {
                 ignore: this.options.resources.copyFiles.ignore,
             }));
         }
-        if (this.options.defines) {
-            this.options.defines['WEBPACK_HOT'] = JSON.stringify(!!this.options.hotReload);
-            this.addPlugin(new webpack.DefinePlugin(this.options.defines));
+        if (this.options.uglify) {
+            this.addPlugin(new webpack.optimize.UglifyJsPlugin({
+                sourceMap: this.options.uglify.sourceMaps,
+                parallel: true,
+                cache: true,
+            }));
         }
+        if (this.options.nodeEnv !== undefined)
+            this.addDefine('process.env.NODE_ENV', this.options.nodeEnv);
+        this.addDefine('WEBPACK_HOT', !!this.options.hotReload);
+        this.addPlugin(new webpack.DefinePlugin(this.options.defines));
         // if (this.isDebug) {
         //     this.addPlugin(new webpack.LoaderOptionsPlugin({ debug: true }));
         // }
@@ -206,6 +215,10 @@ class WebpackConfigurationBuilder {
         this._config.output.filename = this.options.output.filename || '[name].[hash].js';
         this._config.output.publicPath = this.options.output.publicPath;
         if (this.options.babel) {
+            if (!this.options.babel.plugins)
+                this.options.babel.plugins = [];
+            if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
+                this.options.babel.plugins.push('react-hot-loader/babel');
             this.requireNpmPackage('babel-loader@8.0.0-beta.0');
             this.requireNpmPackage('@babel/core');
             this.requireNpmPackage('@babel/polyfill');

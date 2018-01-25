@@ -108,9 +108,20 @@ export interface BaseOptions {
           * Requires 'react-hot-loader/babel' plugin in babel presets.
           */
         hotReload?: boolean;
+        hotReloadNext?: boolean;
     };
     /** default: true */
     hotReload?: boolean;
+    nodeEnv?: string;
+    uglify?: false | {
+        /**
+         * Also transform sourceMaps?
+         * WARNING: Slow for larger projects!!
+         * Also does not work for 'cheap-source-map' options
+         * default: false
+         */
+        sourceMaps?: boolean;
+    };
     cacheLoader?: false | {
         ts?: boolean;
         jsx?: boolean;
@@ -161,6 +172,7 @@ export declare class WebpackConfigurationBuilder {
     private readonly options;
     private readonly _requiredNpmPackages;
     constructor(outDir: string, env: string, options: Options);
+    addDefine(name: string, value: any): void;
     private requireExtension<T>(importName, packageName?);
     addRule(test: string | string[], enforce?: WebpackEnforceRule, checkIfExists?: boolean): WebpackRuleBuilder;
     private testRule(name, enforce?);
