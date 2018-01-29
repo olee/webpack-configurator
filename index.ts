@@ -148,6 +148,9 @@ export interface BaseOptions {
     /** default: true */
     hotReload?: boolean;
     nodeEnv?: string;
+    bundleSizeAnalyzer?: false | {
+        outputFile?: string;
+    };
     uglify?: false | {
         /**
          * Also transform sourceMaps?
@@ -155,7 +158,14 @@ export interface BaseOptions {
          * Also does not work for 'cheap-source-map' options
          * default: false
          */
-        sourceMaps?: boolean;
+        sourceMap?: boolean;
+    };
+    uglifyLoader?: false | {
+        /**
+         * Also transform sourceMaps?
+         * default: false
+         */
+        sourceMap?: boolean;
     };
     cacheLoader?: false | {
         ts?: boolean;
@@ -402,9 +412,16 @@ export class WebpackConfigurationBuilder {
             }));
         }
 
+        if (this.options.bundleSizeAnalyzer) {
+            const WebpackBundleSizeAnalyzerPlugin = this.requireExtension<any>('webpack-bundle-size-analyzer').WebpackBundleSizeAnalyzerPlugin;
+            this.addPlugin(new WebpackBundleSizeAnalyzerPlugin(
+                this.options.bundleSizeAnalyzer.outputFile || path.resolve(__dirname, 'webpack-bundle-size-report-main.txt')
+            ));
+        }
+
         if (this.options.uglify) {
             this.addPlugin(new webpack.optimize.UglifyJsPlugin({
-                sourceMap: this.options.uglify.sourceMaps,
+                sourceMap: this.options.uglify.sourceMap,
                 parallel: true,
                 cache: true, // undocumented in typings??
             } as webpack.optimize.UglifyJsPlugin.Options));
@@ -439,7 +456,8 @@ export class WebpackConfigurationBuilder {
                 this.requireNpmPackage('@babel/preset-react');
             this.addRule('js')
                 .exclude(/node_modules/)
-                .addBabelLoader();
+                .addBabelLoader()
+                .addUglifyLoader();
         }
 
         if (this.options.typescript) {
@@ -452,6 +470,7 @@ export class WebpackConfigurationBuilder {
                 .exclude(/node_modules/)
                 .addTsLoader()
                 .addBabelLoader()
+                .addUglifyLoader()
                 .addCacheLoader('ts');
 
             if (this.options.typescript.tslint) {
@@ -495,6 +514,7 @@ export class WebpackConfigurationBuilder {
             this.addRule('jsx')
                 .addReactHotLoader()
                 .addBabelLoader()
+                .addUglifyLoader()
                 .addCacheLoader('jsx');
 
             if (this.options.typescript) {
@@ -508,6 +528,7 @@ export class WebpackConfigurationBuilder {
                     .addTsLoader()
                     .addReactHotLoader()
                     .addBabelLoader()
+                    .addUglifyLoader()
                     .addCacheLoader('tsx');
 
                 if (this.options.typescript.tslint) {
@@ -679,6 +700,19 @@ export class WebpackRuleBuilder {
             cacheDirectory: true,
             presets: this.options.babel.presets,
             plugins: this.options.babel.plugins,
+        });
+        return this;
+    }
+    
+    /**
+     * Adds 'uglify-loader' if enabled
+     */
+    public addUglifyLoader() {
+        if (!this.options.uglifyLoader)
+            return this;
+        this.addLoader('uglify-loader', {
+            sourceMap: this.options.uglifyLoader.sourceMap,
+            mangle: false,
         });
         return this;
     }

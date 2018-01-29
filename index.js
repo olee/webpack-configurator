@@ -195,9 +195,13 @@ class WebpackConfigurationBuilder {
                 ignore: this.options.resources.copyFiles.ignore,
             }));
         }
+        if (this.options.bundleSizeAnalyzer) {
+            const WebpackBundleSizeAnalyzerPlugin = this.requireExtension('webpack-bundle-size-analyzer').WebpackBundleSizeAnalyzerPlugin;
+            this.addPlugin(new WebpackBundleSizeAnalyzerPlugin(this.options.bundleSizeAnalyzer.outputFile || path.resolve(__dirname, 'webpack-bundle-size-report-main.txt')));
+        }
         if (this.options.uglify) {
             this.addPlugin(new webpack.optimize.UglifyJsPlugin({
-                sourceMap: this.options.uglify.sourceMaps,
+                sourceMap: this.options.uglify.sourceMap,
                 parallel: true,
                 cache: true,
             }));
@@ -227,7 +231,8 @@ class WebpackConfigurationBuilder {
                 this.requireNpmPackage('@babel/preset-react');
             this.addRule('js')
                 .exclude(/node_modules/)
-                .addBabelLoader();
+                .addBabelLoader()
+                .addUglifyLoader();
         }
         if (this.options.typescript) {
             this.requireNpmPackage('typescript');
@@ -238,6 +243,7 @@ class WebpackConfigurationBuilder {
                 .exclude(/node_modules/)
                 .addTsLoader()
                 .addBabelLoader()
+                .addUglifyLoader()
                 .addCacheLoader('ts');
             if (this.options.typescript.tslint) {
                 this.requireNpmPackage('tslint');
@@ -276,6 +282,7 @@ class WebpackConfigurationBuilder {
             this.addRule('jsx')
                 .addReactHotLoader()
                 .addBabelLoader()
+                .addUglifyLoader()
                 .addCacheLoader('jsx');
             if (this.options.typescript) {
                 this.requireNpmPackage('@types/react');
@@ -287,6 +294,7 @@ class WebpackConfigurationBuilder {
                     .addTsLoader()
                     .addReactHotLoader()
                     .addBabelLoader()
+                    .addUglifyLoader()
                     .addCacheLoader('tsx');
                 if (this.options.typescript.tslint) {
                     this.addRule('tsx', 'pre')
@@ -435,6 +443,18 @@ class WebpackRuleBuilder {
             cacheDirectory: true,
             presets: this.options.babel.presets,
             plugins: this.options.babel.plugins,
+        });
+        return this;
+    }
+    /**
+     * Adds 'uglify-loader' if enabled
+     */
+    addUglifyLoader() {
+        if (!this.options.uglifyLoader)
+            return this;
+        this.addLoader('uglify-loader', {
+            sourceMap: this.options.uglifyLoader.sourceMap,
+            mangle: false,
         });
         return this;
     }

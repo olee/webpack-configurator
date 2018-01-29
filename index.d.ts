@@ -113,6 +113,9 @@ export interface BaseOptions {
     /** default: true */
     hotReload?: boolean;
     nodeEnv?: string;
+    bundleSizeAnalyzer?: false | {
+        outputFile?: string;
+    };
     uglify?: false | {
         /**
          * Also transform sourceMaps?
@@ -120,7 +123,14 @@ export interface BaseOptions {
          * Also does not work for 'cheap-source-map' options
          * default: false
          */
-        sourceMaps?: boolean;
+        sourceMap?: boolean;
+    };
+    uglifyLoader?: false | {
+        /**
+         * Also transform sourceMaps?
+         * default: false
+         */
+        sourceMap?: boolean;
     };
     cacheLoader?: false | {
         ts?: boolean;
@@ -212,4 +222,8 @@ export declare class WebpackRuleBuilder {
      * Adds 'babel-loader' if babel is enabled
      */
     addBabelLoader(): this;
+    /**
+     * Adds 'uglify-loader' if enabled
+     */
+    addUglifyLoader(): this;
 }
