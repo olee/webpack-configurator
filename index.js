@@ -126,7 +126,7 @@ class WebpackConfigurationBuilder {
     addRule(test, enforce, checkIfExists = true) {
         let extensions = typeof test === 'string' ? [test] : test;
         let builder = new WebpackRuleBuilder(this.options, this, this.extensionsRegExp(extensions), enforce);
-        if (!checkIfExists || !extensions.find(x => this.testExtension(x))) {
+        if (enforce || !checkIfExists || !extensions.find(x => this.testExtension(x))) {
             this._config.module.rules.push(builder.rule);
         }
         else if (checkIfExists) {
@@ -245,6 +245,25 @@ class WebpackConfigurationBuilder {
                 .addBabelLoader()
                 .addUglifyLoader()
                 .addCacheLoader('ts');
+            if (this.options.typescript.useForkTsChecker) {
+                let tsLintOption = false;
+                if (this.options.typescript.tslint) {
+                    tsLintOption = path.resolve('tslint.json');
+                    if (!fs.existsSync(tsLintOption))
+                        tsLintOption = path.resolve(path.dirname(this.options.typescript.tsConfigFile), 'tslint.json');
+                    if (!fs.existsSync(tsLintOption))
+                        tsLintOption = false;
+                    else
+                        this.options.typescript.tslint = false; // disable tslint because ForkTsCheckerWebpackPlugin already does it
+                }
+                const ForkTsCheckerWebpackPlugin = this.requireExtension('fork-ts-checker-webpack-plugin');
+                this._config.plugins.push(new ForkTsCheckerWebpackPlugin({
+                    tsconfig: this.options.typescript.tsConfigFile,
+                    tslint: tsLintOption,
+                    workers: Math.min(2, ForkTsCheckerWebpackPlugin.TWO_CPUS_FREE),
+                    async: false,
+                }));
+            }
             if (this.options.typescript.tslint) {
                 this.requireNpmPackage('tslint');
                 this.requireNpmPackage('tslint-loader');
@@ -259,13 +278,6 @@ class WebpackConfigurationBuilder {
                 const TsconfigPathsPlugin = this.requireExtension('tsconfig-paths-webpack-plugin');
                 this._config.resolve.plugins.push(new TsconfigPathsPlugin({
                     configFile: this.options.typescript.tsConfigFile,
-                }));
-            }
-            if (this.options.typescript.useForkTsChecker) {
-                const ForkTsCheckerWebpackPlugin = this.requireExtension('fork-ts-checker-webpack-plugin');
-                console.log(this.options.typescript.tsConfigFile);
-                this._config.plugins.push(new ForkTsCheckerWebpackPlugin({
-                    tsconfig: this.options.typescript.tsConfigFile,
                 }));
             }
         }

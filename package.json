@@ -1,5 +1,5 @@
 {
-  "name": "webpack-configurator",
+  "name": "@olee92/webpack-configurator",
   "author": "Björn Zeutzheim",
   "license": "ISC",
   "description": "Utility to create webpack config from simple configuration options",
@@ -21,6 +21,15 @@
   "scripts": {
     "test": "./node_modules/.bin/ts-node test/test.ts"
   },
+  "files": [
+    "index.d.ts",
+    "index.ts",
+    "index.js",
+    "tsconfig.json",
+    "tslint.json",
+    "README.md",
+    "test"
+  ],
   "devDependencies": {
     "@types/clean-webpack-plugin": "^0.1.0",
     "@types/copy-webpack-plugin": "^4.0.1",
