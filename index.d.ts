@@ -88,6 +88,7 @@ export interface BaseOptions {
         useForkTsChecker?: boolean;
         tsConfigFile: string;
         tslint?: false | {
+            tslintJson?: string;
             typeCheck?: boolean;
             emitErrors?: boolean;
         };

@@ -245,21 +245,24 @@ class WebpackConfigurationBuilder {
                 .addBabelLoader()
                 .addUglifyLoader()
                 .addCacheLoader('ts');
-            if (this.options.typescript.useForkTsChecker) {
-                let tsLintOption = false;
-                if (this.options.typescript.tslint) {
-                    tsLintOption = path.resolve('tslint.json');
-                    if (!fs.existsSync(tsLintOption))
-                        tsLintOption = path.resolve(path.dirname(this.options.typescript.tsConfigFile), 'tslint.json');
-                    if (!fs.existsSync(tsLintOption))
-                        tsLintOption = false;
-                    else
-                        this.options.typescript.tslint = false; // disable tslint because ForkTsCheckerWebpackPlugin already does it
+            let tsLintJson;
+            if (this.options.typescript.tslint) {
+                tsLintJson = this.options.typescript.tslint.tslintJson;
+                if (!tsLintJson || !fs.existsSync(tsLintJson)) {
+                    tsLintJson = path.resolve('tslint.json');
+                    if (!fs.existsSync(tsLintJson))
+                        tsLintJson = path.resolve(path.dirname(this.options.typescript.tsConfigFile), 'tslint.json');
+                    if (!fs.existsSync(tsLintJson))
+                        tsLintJson = undefined;
                 }
+            }
+            if (this.options.typescript.useForkTsChecker) {
+                if (tsLintJson)
+                    this.options.typescript.tslint = false; // disable tslint because ForkTsCheckerWebpackPlugin already does it
                 const ForkTsCheckerWebpackPlugin = this.requireExtension('fork-ts-checker-webpack-plugin');
                 this._config.plugins.push(new ForkTsCheckerWebpackPlugin({
                     tsconfig: this.options.typescript.tsConfigFile,
-                    tslint: tsLintOption,
+                    tslint: tsLintJson,
                     workers: Math.min(2, ForkTsCheckerWebpackPlugin.TWO_CPUS_FREE),
                     async: false,
                 }));
@@ -270,6 +273,7 @@ class WebpackConfigurationBuilder {
                 this.addRule('ts', 'pre')
                     .addLoader('tslint-loader', {
                     tsConfigFile: this.options.typescript.tsConfigFile,
+                    configFile: tsLintJson,
                     typeCheck: this.options.typescript.tslint.typeCheck,
                     emitErrors: this.options.typescript.tslint.emitErrors,
                 });
