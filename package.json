@@ -16,7 +16,7 @@
   "bugs": {
     "url": "https://github.com/olee/webpack-configurator/issues"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "index.js",
   "scripts": {
     "test": "./node_modules/.bin/ts-node test/test.ts"
@@ -42,12 +42,11 @@
     "typescript": "^2.6.2"
   },
   "dependencies": {
-    "clean-webpack-plugin": "^0.1.17",
-    "copy-webpack-plugin": "^4.3.1",
     "lodash": "^4.17.4",
     "mock-require": "^3.0.1",
-    "ts-node": "^4.1.0",
-    "url-loader": "^0.6.2",
-    "webpack": "^3.10.0"
+    "ts-node": "^4.1.0"
+  },
+  "peerDependencies": {
+    "webpack": "*"
   }
 }
