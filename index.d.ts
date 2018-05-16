@@ -1,5 +1,7 @@
 /// <reference types="webpack" />
+/// <reference types="webpack-dev-server" />
 import * as webpack from 'webpack';
+import { Configuration as WebpackDevServerConfiguration } from 'webpack-dev-server';
 declare global  {
     interface NodeModule {
         hot?: {
@@ -50,6 +52,7 @@ export interface WebpackConfiguration extends webpack.Configuration {
     resolve: WebpackResolve;
     module: webpack.NewModule;
     plugins: webpack.Plugin[];
+    devServer: WebpackDevServerConfiguration;
 }
 export interface ResourceOptions {
     extensions?: string[];
@@ -67,6 +70,17 @@ export interface OutputOptions {
     filename?: string;
     /** default: undefined */
     publicPath?: string;
+}
+export interface WebpackDevServerConfig {
+    public?: boolean;
+    port?: number;
+    contentBase?: string;
+    historyApiFallback?: boolean;
+    lazy?: boolean;
+    overlay?: {
+        warnings?: boolean;
+        errors?: boolean;
+    };
 }
 export interface BaseOptions {
     /** default: 'cheap-module-source-map' */
@@ -117,6 +131,7 @@ export interface BaseOptions {
     bundleSizeAnalyzer?: false | {
         outputFile?: string;
     };
+    devServer?: WebpackDevServerConfiguration;
     uglify?: false | {
         /**
          * Also transform sourceMaps?
@@ -181,17 +196,19 @@ export declare class WebpackConfigurationBuilder {
     private packageJson;
     readonly packageJsonHash: string;
     private readonly options;
-    private readonly _requiredNpmPackages;
+    private readonly _requiredPackages;
+    private readonly _missingPackages;
     constructor(outDir: string, env: string, options: Options);
     addDefine(name: string, value: any): void;
-    private requireExtension<T>(importName, packageName?);
+    private requireExtension<T>(requireName, dependencyName?);
+    private requirePackage(requireName, dependencyName?);
+    readonly requiredPackages: string[];
+    readonly missingPackages: string[];
     addRule(test: string | string[], enforce?: WebpackEnforceRule, checkIfExists?: boolean): WebpackRuleBuilder;
     private testRule(name, enforce?);
     private testExtension(ext, enforce?);
     private extensionsRegExp(ext);
     private extensionRegExp(...ext);
-    private requireNpmPackage(pkg, devOnly?);
-    readonly requiredNpmPackages: string[];
     addPlugin(plugin: webpack.Plugin): void;
     addEntry(key: string, file: string | string[], options?: WebpackEntryOptions): void;
     build(): webpack.Configuration;
@@ -215,10 +232,6 @@ export declare class WebpackRuleBuilder {
      * Adds 'ts-loader' with correct settings
      */
     addTsLoader(): this;
-    /**
-     * Adds 'react-hot-loader/webpack' if react hot loading enabled and no babel is used
-     */
-    addReactHotLoader(): this;
     /**
      * Adds 'babel-loader' if babel is enabled
      */

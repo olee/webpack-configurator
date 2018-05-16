@@ -6,6 +6,7 @@ import * as _ from 'lodash';
 import * as mockRequire from 'mock-require';
 
 import * as webpack from 'webpack';
+import { Configuration as WebpackDevServerConfiguration } from 'webpack-dev-server';
 import * as TYPES_CleanWebpackPlugin from 'clean-webpack-plugin';
 import * as TYPES_CopyWebpackPlugin from 'copy-webpack-plugin';
 // import * as TYPES_HtmlWebpackPlugin from 'html-webpack-plugin';
@@ -82,6 +83,7 @@ export interface WebpackConfiguration extends webpack.Configuration {
     resolve: WebpackResolve;
     module: webpack.NewModule;
     plugins: webpack.Plugin[];
+    devServer: WebpackDevServerConfiguration;
 }
 
 export interface ResourceOptions {
@@ -101,6 +103,18 @@ export interface OutputOptions {
     filename?: string;
     /** default: undefined */
     publicPath?: string;
+}
+
+export interface WebpackDevServerConfig {
+    public?: boolean;
+    port?: number;
+    contentBase?: string;
+    historyApiFallback?: boolean;
+    lazy?: boolean;
+    overlay?: {
+        warnings?: boolean;
+        errors?: boolean;
+    };
 }
 
 export interface BaseOptions {
@@ -152,6 +166,7 @@ export interface BaseOptions {
     bundleSizeAnalyzer?: false | {
         outputFile?: string;
     };
+    devServer?: WebpackDevServerConfiguration;
     uglify?: false | {
         /**
          * Also transform sourceMaps?
@@ -270,7 +285,9 @@ export class WebpackConfigurationBuilder {
 
     private readonly options: RequiredOptions;
 
-    private readonly _requiredNpmPackages: Record<string, boolean> = {};
+    private readonly _requiredPackages: Record<string, true> = {};
+
+    private readonly _missingPackages: Record<string, true> = {};
 
     constructor(
         public readonly outDir: string,
@@ -317,17 +334,32 @@ export class WebpackConfigurationBuilder {
         this.options.defines[name] = JSON.stringify(value);
     }
 
-    private requireExtension<T>(importName: string, packageName?: string): T {
-        if (!packageName)
-            packageName = importName;
-        this.requireNpmPackage(packageName);
+    private requireExtension<T = any>(requireName: string, dependencyName?: string): T | undefined {
+        if (!dependencyName)
+            dependencyName = requireName;
+        this._requiredPackages[dependencyName] = true;
+        if (dependencyName.startsWith('@types/')) return; // Skip typescript typings
         try {
-            return require(importName);
+            return require(requireName);
         } catch (error) {
-            if (error instanceof Error && error.message.indexOf(`Cannot find module '${packageName}`) >= 0)
-                throw new Error(`You have to install npm package '${packageName}' before running webpack: npm install --save-dev ${packageName}`);
+            if (error instanceof Error && error.message.indexOf(`Cannot find module '${dependencyName}`) >= 0) {
+                this._missingPackages[dependencyName] = true;
+                return;
+            }
             throw error;
         }
+    }
+
+    private requirePackage(requireName: string, dependencyName?: string) {
+        this.requireExtension(requireName, dependencyName);
+    }
+
+    public get requiredPackages() {
+        return Object.keys(this._requiredPackages).sort();
+    }
+
+    public get missingPackages() {
+        return Object.keys(this._missingPackages).sort();
     }
 
     public addRule(test: string | string[], enforce?: WebpackEnforceRule, checkIfExists = true) {
@@ -361,14 +393,6 @@ export class WebpackConfigurationBuilder {
         return this.extensionsRegExp(ext);
     }
 
-    private requireNpmPackage(pkg: string, devOnly = true) {
-        this._requiredNpmPackages[pkg] = devOnly;
-    }
-
-    public get requiredNpmPackages() {
-        return Object.keys(this._requiredNpmPackages).sort();
-    }
-
     public addPlugin(plugin: webpack.Plugin) {
         this._config.plugins.push(plugin);
     }
@@ -378,9 +402,6 @@ export class WebpackConfigurationBuilder {
             throw new Error(`Duplicate webpack entry with key ${key}`);
         if (!(file instanceof Array))
             file = [file];
-        if (options.react !== false && this.options.hotReload && this.options.react && this.options.react.hotReload && !this.options.react.hotReloadNext) {
-            file.unshift('react-hot-loader/patch');
-        }
         if (options.babelPolyfill && this.options.babel)
             file.unshift('babel-polyfill');
         this._config.entry[key] = file;
@@ -389,12 +410,16 @@ export class WebpackConfigurationBuilder {
     public build(): webpack.Configuration {
         if (this._built) throw new Error('build() must only be called once!');
         this._built = true;
+        
+        Object.assign(this._config.devServer, this.options.devServer);
 
         if (this.options.clean) {
             const CleanWebpackPlugin = this.requireExtension<typeof TYPES_CleanWebpackPlugin>('clean-webpack-plugin');
-            this.addPlugin(new CleanWebpackPlugin(path.resolve(this.outDir, '**'), {
-                exclude: this.options.clean.exclude,
-            }));
+            if (CleanWebpackPlugin) {
+                this.addPlugin(new CleanWebpackPlugin(path.resolve(this.outDir, '**'), {
+                    exclude: this.options.clean.exclude,
+                }));
+            }
         }
 
         if (this.options.namedModules) {
@@ -408,16 +433,20 @@ export class WebpackConfigurationBuilder {
 
         if (this.options.resources.copyFiles) {
             const CopyWebpackPlugin = this.requireExtension<typeof TYPES_CopyWebpackPlugin>('copy-webpack-plugin');
-            this.addPlugin(new CopyWebpackPlugin(this.options.resources.copyFiles.patterns, {
-                ignore: this.options.resources.copyFiles.ignore,
-            }));
+            if (CopyWebpackPlugin) {
+                this.addPlugin(new CopyWebpackPlugin(this.options.resources.copyFiles.patterns, {
+                    ignore: this.options.resources.copyFiles.ignore,
+                }));
+            }
         }
 
         if (this.options.bundleSizeAnalyzer) {
             const WebpackBundleSizeAnalyzerPlugin = this.requireExtension<any>('webpack-bundle-size-analyzer').WebpackBundleSizeAnalyzerPlugin;
-            this.addPlugin(new WebpackBundleSizeAnalyzerPlugin(
-                this.options.bundleSizeAnalyzer.outputFile || path.resolve(__dirname, 'webpack-bundle-size-report-main.txt')
-            ));
+            if (WebpackBundleSizeAnalyzerPlugin) {
+                this.addPlugin(new WebpackBundleSizeAnalyzerPlugin(
+                    this.options.bundleSizeAnalyzer.outputFile || path.resolve(__dirname, 'webpack-bundle-size-report-main.txt')
+                ));
+            }
         }
 
         if (this.options.uglify) {
@@ -427,6 +456,9 @@ export class WebpackConfigurationBuilder {
                 cache: true, // undocumented in typings??
             } as webpack.optimize.UglifyJsPlugin.Options));
         }
+
+        if (this.options.cacheLoader)
+            this.requirePackage('cache-loader');
 
         if (this.options.nodeEnv !== undefined)
             this.addDefine('process.env.NODE_ENV', this.options.nodeEnv);
@@ -449,12 +481,12 @@ export class WebpackConfigurationBuilder {
             if (this.options.react && this.options.react.hotReload && this.options.babel.plugins.indexOf('react-hot-loader/babel') < 0)
                 this.options.babel.plugins.push('react-hot-loader/babel');
 
-            this.requireNpmPackage('babel-loader@8.0.0-beta.0');
-            this.requireNpmPackage('@babel/core');
-            this.requireNpmPackage('@babel/polyfill');
-            this.requireNpmPackage('@babel/preset-env');
+            this.requirePackage('babel-loader', 'babel-loader@^8.0.0-beta');
+            this.requirePackage('@babel/core');
+            this.requirePackage('@babel/polyfill');
+            this.requirePackage('@babel/preset-env');
             if (this.options.react)
-                this.requireNpmPackage('@babel/preset-react');
+                this.requirePackage('@babel/preset-react');
             this.addRule('js')
                 .exclude(/node_modules/)
                 .addBabelLoader()
@@ -462,8 +494,8 @@ export class WebpackConfigurationBuilder {
         }
 
         if (this.options.typescript) {
-            this.requireNpmPackage('typescript');
-            this.requireNpmPackage('ts-loader');
+            this.requirePackage('typescript');
+            this.requirePackage('ts-loader');
 
             if (this._config.resolve.extensions.indexOf('.ts') < 0)
                 this._config.resolve.extensions.push('.ts');
@@ -473,7 +505,7 @@ export class WebpackConfigurationBuilder {
                 .addBabelLoader()
                 .addUglifyLoader()
                 .addCacheLoader('ts');
-            
+
             let tsLintJson: string | undefined;
             if (this.options.typescript.tslint) {
                 tsLintJson = this.options.typescript.tslint.tslintJson;
@@ -488,19 +520,21 @@ export class WebpackConfigurationBuilder {
             if (this.options.typescript.useForkTsChecker) {
                 if (tsLintJson)
                     this.options.typescript.tslint = false; // disable tslint because ForkTsCheckerWebpackPlugin already does it
-                
+
                 const ForkTsCheckerWebpackPlugin = this.requireExtension<any>('fork-ts-checker-webpack-plugin');
-                this._config.plugins.push(new ForkTsCheckerWebpackPlugin({
-                    tsconfig: this.options.typescript.tsConfigFile,
-                    tslint: tsLintJson,
-                    workers: Math.min(2, ForkTsCheckerWebpackPlugin.TWO_CPUS_FREE),
-                    async: false,
-                }));
+                if (ForkTsCheckerWebpackPlugin) {
+                    this._config.plugins.push(new ForkTsCheckerWebpackPlugin({
+                        tsconfig: this.options.typescript.tsConfigFile,
+                        tslint: tsLintJson,
+                        workers: Math.min(2, ForkTsCheckerWebpackPlugin.TWO_CPUS_FREE),
+                        async: false,
+                    }));
+                }
             }
 
             if (this.options.typescript.tslint) {
-                this.requireNpmPackage('tslint');
-                this.requireNpmPackage('tslint-loader');
+                this.requirePackage('tslint');
+                this.requirePackage('tslint-loader');
                 this.addRule('ts', 'pre')
                     .addLoader('tslint-loader', {
                         tsConfigFile: this.options.typescript.tsConfigFile,
@@ -512,39 +546,41 @@ export class WebpackConfigurationBuilder {
 
             if (this.options.typescript.useTsconfigPaths) {
                 const TsconfigPathsPlugin = this.requireExtension<any>('tsconfig-paths-webpack-plugin');
-                this._config.resolve.plugins.push(new TsconfigPathsPlugin({
-                    configFile: this.options.typescript.tsConfigFile,
-                }));
+                if (TsconfigPathsPlugin) {
+                    this._config.resolve.plugins.push(new TsconfigPathsPlugin({
+                        configFile: this.options.typescript.tsConfigFile,
+                    }));
+                }
             }
         }
 
         if (this.options.react) {
-            this.requireNpmPackage('react');
-            this.requireNpmPackage('react-dom');
+            this.requirePackage('react');
+            this.requirePackage('react-dom');
             if (this.options.react.hotReload) {
-                this.requireNpmPackage('react-hot-loader');
+                if (!this.options.babel)
+                    throw new Error('react-hot-loader requires babel');
+                this.requirePackage('react-hot-loader');
                 if (this.options.typescript)
-                    this.requireNpmPackage('@types/react-hot-loader');
+                    this.requirePackage('@types/react-hot-loader');
             }
 
             if (this._config.resolve.extensions.indexOf('.jsx') < 0)
                 this._config.resolve.extensions.push('.jsx');
             this.addRule('jsx')
-                .addReactHotLoader()
                 .addBabelLoader()
                 .addUglifyLoader()
                 .addCacheLoader('jsx');
 
             if (this.options.typescript) {
-                this.requireNpmPackage('@types/react');
-                this.requireNpmPackage('@types/react-dom');
+                this.requirePackage('@types/react');
+                this.requirePackage('@types/react-dom');
 
                 if (this._config.resolve.extensions.indexOf('.tsx') < 0)
                     this._config.resolve.extensions.push('.tsx');
                 this.addRule('tsx')
                     .exclude(/node_modules/)
                     .addTsLoader()
-                    .addReactHotLoader()
                     .addBabelLoader()
                     .addUglifyLoader()
                     .addCacheLoader('tsx');
@@ -561,16 +597,16 @@ export class WebpackConfigurationBuilder {
         }
 
         if (this.options.css) {
-            this.requireNpmPackage('css-loader');
-            this.requireNpmPackage('style-loader');
+            this.requirePackage('css-loader');
+            this.requirePackage('style-loader');
 
             this.addRule('css')
                 .addLoader('css-loader')
                 .addLoader('style-loader', { sourceMap: this.options.css.sourceMaps });
 
             if (this.options.css.scss) {
-                this.requireNpmPackage('sass-loader');
-                // this.requireNpmPackage('node-sass'); // Already required as peer-dependency of sass-loader
+                this.requirePackage('sass-loader');
+                // this.requirePackage('node-sass'); // Already required as peer-dependency of sass-loader
 
                 this.addRule('scss')
                     .addLoader('sass-loader')
@@ -581,10 +617,10 @@ export class WebpackConfigurationBuilder {
         }
 
         if (this.options.html) {
-            this.requireNpmPackage('html-loader');
+            this.requirePackage('html-loader');
             switch (this.options.html) {
                 case 'angular':
-                    this.requireNpmPackage('ngtemplate-loader');
+                    this.requirePackage('ngtemplate-loader');
                     this.addRule('html')
                         .addLoader('html-loader')
                         .addLoader('ngtemplate-loader') // , { relativeTo: '/src/' }) // TODO: What is relativeTo and what should it be?
@@ -598,13 +634,13 @@ export class WebpackConfigurationBuilder {
         }
 
         if (this.options.json) {
-            this.requireNpmPackage('json-loader');
+            this.requirePackage('json-loader');
             this.addRule('json')
                 .addLoader('json-loader');
         }
 
         if (this.options.resources.urlLoad) {
-            this.requireNpmPackage('url-loader');
+            this.requirePackage('url-loader');
             let unmatchedExtensions = this.options.resources.urlLoad.extensions
                 .filter(x => !this.testExtension(x));
             if (unmatchedExtensions.length > 0) {
@@ -617,7 +653,7 @@ export class WebpackConfigurationBuilder {
         }
 
         if (this.options.resources.extensions) {
-            this.requireNpmPackage('file-loader');
+            this.requirePackage('file-loader');
             let unmatchedExtensions = this.options.resources.extensions
                 .filter(x => !this.testExtension(x));
             if (unmatchedExtensions.length > 0) {
@@ -626,6 +662,14 @@ export class WebpackConfigurationBuilder {
                         name: '[path][name].[hash].[ext]',
                     });
             }
+        }
+
+        if (this.missingPackages.length > 0) {
+            let missingPackages = this.missingPackages.join(' ');
+            throw new Error(`Missing webpack packages detected. Please install the following packages:
+==> npm install --save-dev ${missingPackages}
+==> yarn add -D ${missingPackages}
+`);
         }
 
         return this._config;
@@ -694,15 +738,6 @@ export class WebpackRuleBuilder {
         this.addLoader('ts-loader', {
             transpileOnly: this.options.typescript.useForkTsChecker,
         });
-        return this;
-    }
-
-    /**
-     * Adds 'react-hot-loader/webpack' if react hot loading enabled and no babel is used
-     */
-    public addReactHotLoader() {
-        if (this.options.hotReload && this.options.react && this.options.react.hotReload && !this.options.babel)
-            this.addLoader('react-hot-loader/webpack');
         return this;
     }
 
