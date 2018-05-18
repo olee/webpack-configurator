@@ -28,6 +28,10 @@ const configBuilder = new WebpackConfigurationBuilder(path.resolve(__dirname, 'b
     react: {
         hotReload: true,
     },
+    tools: {
+        webpackBundleAnalyzer: {},
+        webpackBundleSizeAnalyzer: {},
+    },
     html: 'angular',
     resources: {
         extensions: ['png', 'gif', 'jpg', 'jpeg', 'ico', 'cur', 'svg', 'woff', 'woff2', 'eot', 'ttf'],

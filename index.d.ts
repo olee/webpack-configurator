@@ -2,6 +2,7 @@
 /// <reference types="webpack-dev-server" />
 import * as webpack from 'webpack';
 import { Configuration as WebpackDevServerConfiguration } from 'webpack-dev-server';
+import * as TYPES_WebpackBundleAnalyzer from 'webpack-bundle-analyzer';
 declare global  {
     interface NodeModule {
         hot?: {
@@ -113,7 +114,7 @@ export interface BaseOptions {
      */
     babel?: false | {
         presets?: (string | (string | any)[])[];
-        plugins?: string[];
+        plugins?: (string | (string | any)[])[];
     };
     /** default: false */
     react?: false | {
@@ -128,8 +129,11 @@ export interface BaseOptions {
     /** default: true */
     hotReload?: boolean;
     nodeEnv?: string;
-    bundleSizeAnalyzer?: false | {
-        outputFile?: string;
+    tools?: {
+        webpackBundleAnalyzer?: false | TYPES_WebpackBundleAnalyzer.BundleAnalyzerPlugin.Options;
+        webpackBundleSizeAnalyzer?: false | {
+            outputFile?: string;
+        };
     };
     devServer?: WebpackDevServerConfiguration;
     uglify?: false | {
@@ -181,12 +185,6 @@ export interface RequiredOptions extends Options {
     output: OutputOptions;
     defines: Record<string, string>;
 }
-export interface WebpackEntryOptions {
-    /** default: true */
-    react?: boolean;
-    /** default: true */
-    babelPolyfill?: boolean;
-}
 export declare type WebpackEnforceRule = 'pre' | 'post';
 export declare class WebpackConfigurationBuilder {
     readonly outDir: string;
@@ -194,13 +192,13 @@ export declare class WebpackConfigurationBuilder {
     private _config;
     private _built;
     private packageJson;
-    readonly packageJsonHash: string;
+    readonly packageJsonHash?: string;
     private readonly options;
     private readonly _requiredPackages;
     private readonly _missingPackages;
     constructor(outDir: string, env: string, options: Options);
     addDefine(name: string, value: any): void;
-    private requireExtension<T>(requireName, dependencyName?);
+    private requireExtension<T>(requireName, dependencyName?, typings?);
     private requirePackage(requireName, dependencyName?);
     readonly requiredPackages: string[];
     readonly missingPackages: string[];
@@ -210,7 +208,7 @@ export declare class WebpackConfigurationBuilder {
     private extensionsRegExp(ext);
     private extensionRegExp(...ext);
     addPlugin(plugin: webpack.Plugin): void;
-    addEntry(key: string, file: string | string[], options?: WebpackEntryOptions): void;
+    addEntry(key: string, file: string | string[]): void;
     build(): webpack.Configuration;
     readonly config: webpack.Configuration;
 }

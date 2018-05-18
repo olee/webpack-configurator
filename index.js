@@ -102,8 +102,8 @@ class WebpackConfigurationBuilder {
         }
         let pkgJson = fs.readFileSync('./package.json', 'UTF-8');
         if (pkgJson) {
-            this.packageJson = JSON.parse(pkgJson);
             this.packageJsonHash = crypto.createHash('md5').update(pkgJson).digest('hex');
+            this.packageJson = JSON.parse(pkgJson);
         }
     }
     addDefine(name, value) {
@@ -111,10 +111,12 @@ class WebpackConfigurationBuilder {
             this.options.defines = {};
         this.options.defines[name] = JSON.stringify(value);
     }
-    requireExtension(requireName, dependencyName) {
+    requireExtension(requireName, dependencyName, typings) {
         if (!dependencyName)
             dependencyName = requireName;
         this._requiredPackages[dependencyName] = true;
+        if (this.options.typescript && typings)
+            this._requiredPackages[typeof typings === 'string' ? typings : '@types/' + requireName] = true;
         if (dependencyName.startsWith('@types/'))
             return; // Skip typescript typings
         try {
@@ -123,6 +125,8 @@ class WebpackConfigurationBuilder {
         catch (error) {
             if (error instanceof Error && error.message.indexOf(`Cannot find module '${dependencyName}`) >= 0) {
                 this._missingPackages[dependencyName] = true;
+                if (this.options.typescript && typings)
+                    this._missingPackages[typeof typings === 'string' ? typings : '@types/' + requireName] = true;
                 return;
             }
             throw error;
@@ -168,13 +172,11 @@ class WebpackConfigurationBuilder {
     addPlugin(plugin) {
         this._config.plugins.push(plugin);
     }
-    addEntry(key, file, options = {}) {
+    addEntry(key, file) {
         if (this._config.entry[key])
             throw new Error(`Duplicate webpack entry with key ${key}`);
         if (!(file instanceof Array))
             file = [file];
-        if (options.babelPolyfill && this.options.babel)
-            file.unshift('babel-polyfill');
         this._config.entry[key] = file;
     }
     build() {
@@ -205,10 +207,20 @@ class WebpackConfigurationBuilder {
                 }));
             }
         }
-        if (this.options.bundleSizeAnalyzer) {
-            const WebpackBundleSizeAnalyzerPlugin = this.requireExtension('webpack-bundle-size-analyzer').WebpackBundleSizeAnalyzerPlugin;
-            if (WebpackBundleSizeAnalyzerPlugin) {
-                this.addPlugin(new WebpackBundleSizeAnalyzerPlugin(this.options.bundleSizeAnalyzer.outputFile || path.resolve(__dirname, 'webpack-bundle-size-report-main.txt')));
+        if (this.options.tools) {
+            if (this.options.tools.webpackBundleAnalyzer) {
+                const WebpackBundleAnalyzer = this.requireExtension('webpack-bundle-analyzer', undefined, true);
+                if (WebpackBundleAnalyzer) {
+                    if (WebpackBundleAnalyzer) {
+                        this.addPlugin(new WebpackBundleAnalyzer.BundleAnalyzerPlugin(Object.assign({ analyzerMode: 'static', reportFilename: 'webpack-bundle-analyzer.html', openAnalyzer: false, generateStatsFile: true, statsFilename: 'webpack-bundle-analyzer.json' }, this.options.tools.webpackBundleAnalyzer)));
+                    }
+                }
+            }
+            if (this.options.tools.webpackBundleSizeAnalyzer) {
+                const WebpackBundleSizeAnalyzer = this.requireExtension('webpack-bundle-size-analyzer');
+                if (WebpackBundleSizeAnalyzer) {
+                    this.addPlugin(new WebpackBundleSizeAnalyzer.WebpackBundleSizeAnalyzerPlugin(this.options.tools.webpackBundleSizeAnalyzer.outputFile || 'webpack-bundle-size-report-main.txt'));
+                }
             }
         }
         if (this.options.uglify) {
@@ -239,7 +251,6 @@ class WebpackConfigurationBuilder {
                 this.options.babel.plugins.push('react-hot-loader/babel');
             this.requirePackage('babel-loader', 'babel-loader@^8.0.0-beta');
             this.requirePackage('@babel/core');
-            this.requirePackage('@babel/polyfill');
             this.requirePackage('@babel/preset-env');
             if (this.options.react)
                 this.requirePackage('@babel/preset-react');
@@ -402,9 +413,13 @@ class WebpackConfigurationBuilder {
         }
         if (this.missingPackages.length > 0) {
             let missingPackages = this.missingPackages.join(' ');
+            let requiredPackages = this.requiredPackages.join(' ');
             throw new Error(`Missing webpack packages detected. Please install the following packages:
 ==> npm install --save-dev ${missingPackages}
 ==> yarn add -D ${missingPackages}
+
+List of all required packaages:
+${requiredPackages}
 `);
         }
         return this._config;

@@ -16,7 +16,7 @@
   "bugs": {
     "url": "https://github.com/olee/webpack-configurator/issues"
   },
-  "version": "0.2.1",
+  "version": "0.2.7",
   "main": "index.js",
   "scripts": {
     "test": "./node_modules/.bin/ts-node test/test.ts"
@@ -37,8 +37,10 @@
     "@types/mock-require": "^2.0.0",
     "@types/node": "^10.1.0",
     "@types/react-hot-loader": "^4.1.0",
+    "@types/webpack-bundle-analyzer": "^2.9.2",
     "fork-ts-checker-webpack-plugin": "^0.4.1",
-    "typescript": "^2.8.3"
+    "typescript": "^2.8.3",
+    "webpack-bundle-analyzer": "^2.12.0"
   },
   "dependencies": {
     "@types/webpack": "^4.1.7",

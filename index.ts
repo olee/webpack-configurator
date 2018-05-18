@@ -9,6 +9,7 @@ import * as webpack from 'webpack';
 import { Configuration as WebpackDevServerConfiguration } from 'webpack-dev-server';
 import * as TYPES_CleanWebpackPlugin from 'clean-webpack-plugin';
 import * as TYPES_CopyWebpackPlugin from 'copy-webpack-plugin';
+import * as TYPES_WebpackBundleAnalyzer from 'webpack-bundle-analyzer';
 // import * as TYPES_HtmlWebpackPlugin from 'html-webpack-plugin';
 // import * as TYPES_TsconfigPathsPlugin from 'tsconfig-paths-webpack-plugin'; // Has no typings yet
 // import * as TYPES_ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin'; // Has no typings yet
@@ -148,7 +149,7 @@ export interface BaseOptions {
      */
     babel?: false | {
         presets?: (string | (string | any)[])[];
-        plugins?: string[];
+        plugins?: (string | (string | any)[])[];
     };
     /** default: false */
     react?: false | {
@@ -163,8 +164,11 @@ export interface BaseOptions {
     /** default: true */
     hotReload?: boolean;
     nodeEnv?: string;
-    bundleSizeAnalyzer?: false | {
-        outputFile?: string;
+    tools?: {
+        webpackBundleAnalyzer?: false | TYPES_WebpackBundleAnalyzer.BundleAnalyzerPlugin.Options;
+        webpackBundleSizeAnalyzer?: false | {
+            outputFile?: string;
+        };
     };
     devServer?: WebpackDevServerConfiguration;
     uglify?: false | {
@@ -217,13 +221,6 @@ export interface RequiredOptions extends Options {
     resources: ResourceOptions;
     output: OutputOptions;
     defines: Record<string, string>;
-}
-
-export interface WebpackEntryOptions {
-    /** default: true */
-    react?: boolean;
-    /** default: true */
-    babelPolyfill?: boolean;
 }
 
 export type WebpackEnforceRule = 'pre' | 'post';
@@ -281,7 +278,7 @@ export class WebpackConfigurationBuilder {
 
     private packageJson: any;
 
-    public readonly packageJsonHash: string;
+    public readonly packageJsonHash?: string;
 
     private readonly options: RequiredOptions;
 
@@ -323,8 +320,8 @@ export class WebpackConfigurationBuilder {
 
         let pkgJson = fs.readFileSync('./package.json', 'UTF-8');
         if (pkgJson) {
-            this.packageJson = JSON.parse(pkgJson);
             this.packageJsonHash = crypto.createHash('md5').update(pkgJson).digest('hex');
+            this.packageJson = JSON.parse(pkgJson);
         }
     }
 
@@ -334,16 +331,20 @@ export class WebpackConfigurationBuilder {
         this.options.defines[name] = JSON.stringify(value);
     }
 
-    private requireExtension<T = any>(requireName: string, dependencyName?: string): T | undefined {
+    private requireExtension<T = any>(requireName: string, dependencyName?: string, typings?: boolean | string): T | undefined {
         if (!dependencyName)
             dependencyName = requireName;
         this._requiredPackages[dependencyName] = true;
+        if (this.options.typescript && typings)
+            this._requiredPackages[typeof typings === 'string' ? typings : '@types/' + requireName] = true;
         if (dependencyName.startsWith('@types/')) return; // Skip typescript typings
         try {
             return require(requireName);
         } catch (error) {
             if (error instanceof Error && error.message.indexOf(`Cannot find module '${dependencyName}`) >= 0) {
                 this._missingPackages[dependencyName] = true;
+                if (this.options.typescript && typings)
+                    this._missingPackages[typeof typings === 'string' ? typings : '@types/' + requireName] = true;
                 return;
             }
             throw error;
@@ -397,13 +398,11 @@ export class WebpackConfigurationBuilder {
         this._config.plugins.push(plugin);
     }
 
-    public addEntry(key: string, file: string | string[], options: WebpackEntryOptions = {}) {
+    public addEntry(key: string, file: string | string[]) {
         if (this._config.entry[key])
             throw new Error(`Duplicate webpack entry with key ${key}`);
         if (!(file instanceof Array))
             file = [file];
-        if (options.babelPolyfill && this.options.babel)
-            file.unshift('babel-polyfill');
         this._config.entry[key] = file;
     }
 
@@ -440,12 +439,30 @@ export class WebpackConfigurationBuilder {
             }
         }
 
-        if (this.options.bundleSizeAnalyzer) {
-            const WebpackBundleSizeAnalyzerPlugin = this.requireExtension<any>('webpack-bundle-size-analyzer').WebpackBundleSizeAnalyzerPlugin;
-            if (WebpackBundleSizeAnalyzerPlugin) {
-                this.addPlugin(new WebpackBundleSizeAnalyzerPlugin(
-                    this.options.bundleSizeAnalyzer.outputFile || path.resolve(__dirname, 'webpack-bundle-size-report-main.txt')
-                ));
+        if (this.options.tools) {
+            if (this.options.tools.webpackBundleAnalyzer) {
+                const WebpackBundleAnalyzer = this.requireExtension<typeof TYPES_WebpackBundleAnalyzer>('webpack-bundle-analyzer', undefined, true);
+                if (WebpackBundleAnalyzer) {
+                    if (WebpackBundleAnalyzer) {
+                        this.addPlugin(new WebpackBundleAnalyzer.BundleAnalyzerPlugin({
+                            analyzerMode: 'static',
+                            reportFilename: 'webpack-bundle-analyzer.html',
+                            openAnalyzer: false,
+                            generateStatsFile: true,
+                            statsFilename: 'webpack-bundle-analyzer.json',
+                            ...this.options.tools.webpackBundleAnalyzer,
+                        }));
+                    }
+                }
+            }
+            
+            if (this.options.tools.webpackBundleSizeAnalyzer) {
+                const WebpackBundleSizeAnalyzer = this.requireExtension<any>('webpack-bundle-size-analyzer');
+                if (WebpackBundleSizeAnalyzer) {
+                    this.addPlugin(new WebpackBundleSizeAnalyzer.WebpackBundleSizeAnalyzerPlugin(
+                        this.options.tools.webpackBundleSizeAnalyzer.outputFile || 'webpack-bundle-size-report-main.txt'
+                    ));
+                }
             }
         }
 
@@ -483,7 +500,6 @@ export class WebpackConfigurationBuilder {
 
             this.requirePackage('babel-loader', 'babel-loader@^8.0.0-beta');
             this.requirePackage('@babel/core');
-            this.requirePackage('@babel/polyfill');
             this.requirePackage('@babel/preset-env');
             if (this.options.react)
                 this.requirePackage('@babel/preset-react');
@@ -666,9 +682,13 @@ export class WebpackConfigurationBuilder {
 
         if (this.missingPackages.length > 0) {
             let missingPackages = this.missingPackages.join(' ');
+            let requiredPackages = this.requiredPackages.join(' ');
             throw new Error(`Missing webpack packages detected. Please install the following packages:
 ==> npm install --save-dev ${missingPackages}
 ==> yarn add -D ${missingPackages}
+
+List of all required packaages:
+${requiredPackages}
 `);
         }
 
